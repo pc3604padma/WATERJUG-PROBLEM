@@ -1,0 +1,951 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Water Jug — BFS Puzzle Game</title>
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Rajdhani:wght@400;600;700&family=Fira+Code:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg:#030810;--panel:#071120;--panel2:#0b1a30;--border:#1a3550;
+  --accent:#00e5ff;--accent2:#0044cc;--gold:#ffd700;--green:#00ff88;
+  --red:#ff3355;--purple:#bf7fff;--text:#ddeeff;--muted:#4a7090;
+  --node-default:#0b2040;--node-visited:#0a3020;--node-current:#1a3060;
+  --node-goal:#3a2a00;--node-player:#2a1040;--node-path:#1a3a00;
+}
+*{margin:0;padding:0;box-sizing:border-box;}
+body{background:var(--bg);color:var(--text);font-family:'Rajdhani',sans-serif;min-height:100vh;overflow-x:hidden;user-select:none;}
+body::after{content:'';position:fixed;inset:0;background:repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,0,0,.06) 2px,rgba(0,0,0,.06) 4px);pointer-events:none;z-index:999;}
+.stars{position:fixed;inset:0;z-index:0;overflow:hidden;}
+.star{position:absolute;border-radius:50%;background:white;animation:twinkle var(--d,3s) ease-in-out infinite var(--dl,0s);}
+@keyframes twinkle{0%,100%{opacity:.1;transform:scale(1)}50%{opacity:.7;transform:scale(1.4)}}
+
+/* ── LAYOUT ── */
+.shell{position:relative;z-index:1;max-width:1300px;margin:0 auto;padding:12px;display:flex;flex-direction:column;gap:12px;}
+
+/* ── HEADER ── */
+.hdr{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;
+  background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:12px 20px;position:relative;overflow:hidden;}
+.hdr::after{content:'';position:absolute;bottom:0;left:0;right:0;height:2px;background:linear-gradient(90deg,transparent,var(--accent),transparent);}
+.hdr-title{font-family:'Orbitron',monospace;font-size:clamp(13px,2.5vw,20px);font-weight:900;
+  background:linear-gradient(90deg,#fff,var(--accent));-webkit-background-clip:text;-webkit-text-fill-color:transparent;letter-spacing:2px;}
+.hdr-sub{font-size:10px;color:var(--muted);letter-spacing:2px;margin-top:2px;}
+.hdr-stats{display:flex;gap:18px;}
+.hstat{text-align:center;}
+.hstat-val{font-family:'Orbitron',monospace;font-size:20px;font-weight:700;color:var(--gold);}
+.hstat-lbl{font-size:9px;color:var(--muted);letter-spacing:2px;text-transform:uppercase;}
+.py-pill{display:flex;align-items:center;gap:7px;background:rgba(0,255,136,.06);border:1px solid rgba(0,255,136,.2);
+  border-radius:20px;padding:5px 13px;font-family:'Fira Code',monospace;font-size:10px;color:var(--green);cursor:pointer;}
+.py-dot{width:7px;height:7px;border-radius:50%;background:var(--green);box-shadow:0 0 6px var(--green);animation:blink 1.5s ease-in-out infinite;}
+.py-dot.off{background:var(--red);box-shadow:0 0 6px var(--red);animation:none;}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.2}}
+
+/* ── SETUP SCREEN ── */
+.setup{background:var(--panel);border:1px solid var(--border);border-radius:16px;padding:30px;text-align:center;}
+.setup h2{font-family:'Orbitron',monospace;font-size:clamp(16px,3vw,26px);font-weight:900;color:var(--accent);letter-spacing:2px;margin-bottom:6px;}
+.setup p{color:var(--muted);font-size:13px;letter-spacing:1px;margin-bottom:26px;}
+.sinputs{display:flex;justify-content:center;gap:18px;flex-wrap:wrap;margin-bottom:18px;}
+.sg{display:flex;flex-direction:column;align-items:center;gap:7px;}
+.sg label{font-family:'Orbitron',monospace;font-size:9px;letter-spacing:2px;color:var(--accent);text-transform:uppercase;}
+.sg input{width:86px;text-align:center;background:rgba(0,229,255,.05);border:2px solid var(--border);border-radius:10px;
+  color:#fff;font-family:'Orbitron',monospace;font-size:26px;font-weight:900;padding:9px;outline:none;transition:.3s;}
+.sg input:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(0,229,255,.14);}
+.presets{display:flex;justify-content:center;gap:7px;flex-wrap:wrap;margin-bottom:22px;}
+.pb{padding:5px 14px;border-radius:20px;border:1px solid var(--border);background:rgba(255,255,255,.03);
+  color:var(--muted);font-family:'Fira Code',monospace;font-size:11px;cursor:pointer;transition:.2s;}
+.pb:hover{border-color:var(--accent);color:var(--accent);}
+.btn-start{display:inline-block;padding:13px 48px;background:linear-gradient(135deg,var(--accent2),var(--accent));
+  color:#000;font-family:'Orbitron',monospace;font-size:13px;font-weight:900;letter-spacing:3px;
+  border:none;border-radius:12px;cursor:pointer;box-shadow:0 0 28px rgba(0,229,255,.3);transition:.2s;}
+.btn-start:hover{transform:translateY(-2px);box-shadow:0 0 42px rgba(0,229,255,.5);}
+
+/* ── GAME WRAPPER (game + tree side by side) ── */
+.game-wrapper{display:grid;grid-template-columns:1fr 380px;gap:12px;align-items:start;}
+@media(max-width:900px){.game-wrapper{grid-template-columns:1fr;}}
+
+/* ── GAME COLUMN ── */
+.game-col{display:flex;flex-direction:column;gap:12px;}
+
+/* TARGET BANNER */
+.tbanner{background:linear-gradient(135deg,rgba(255,215,0,.08),rgba(255,215,0,.03));
+  border:1px solid rgba(255,215,0,.3);border-radius:12px;padding:11px 18px;
+  display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;}
+.tbanner-txt{font-family:'Orbitron',monospace;font-size:12px;color:var(--gold);letter-spacing:1px;}
+.tbanner-txt b{font-size:18px;}
+.moves-ct{font-family:'Orbitron',monospace;font-size:11px;color:var(--muted);}
+.moves-ct b{color:var(--text);font-size:17px;}
+.bfs-badge{background:rgba(0,255,136,.07);border:1px solid rgba(0,255,136,.22);border-radius:20px;
+  padding:3px 12px;font-family:'Fira Code',monospace;font-size:10px;color:var(--green);}
+
+/* JUGS ROW */
+.jugs-row{display:grid;grid-template-columns:1fr auto 1fr;gap:12px;align-items:start;}
+.jug-card{background:var(--panel);border:2px solid var(--border);border-radius:14px;
+  padding:16px;display:flex;flex-direction:column;align-items:center;gap:10px;
+  transition:border-color .3s,box-shadow .3s;position:relative;overflow:hidden;}
+.jug-card::before{content:'';position:absolute;top:0;left:0;right:0;height:2px;
+  background:linear-gradient(90deg,transparent,var(--accent),transparent);opacity:.2;transition:opacity .3s;}
+.jug-card.flash{border-color:rgba(0,229,255,.7);box-shadow:0 0 24px rgba(0,229,255,.16);}
+.jug-card.flash::before{opacity:1;}
+.jug-name{font-family:'Orbitron',monospace;font-size:10px;letter-spacing:3px;color:var(--accent);text-transform:uppercase;}
+.jug-lit{font-family:'Orbitron',monospace;font-size:28px;font-weight:900;color:#fff;transition:color .3s;}
+.jug-lit.changed{color:var(--accent);}
+.jug-lit.goal{color:var(--gold);animation:gp 1s ease-in-out infinite;}
+@keyframes gp{0%,100%{text-shadow:0 0 10px rgba(255,215,0,.3)}50%{text-shadow:0 0 26px rgba(255,215,0,.9)}}
+.jug-max{font-size:11px;color:var(--muted);}
+.mid-col{display:flex;flex-direction:column;gap:8px;align-items:center;padding-top:16px;}
+.mid-arr{font-size:20px;opacity:.18;}
+
+/* ACTIONS */
+.actions{background:var(--panel);border:1px solid var(--border);border-radius:13px;padding:14px;}
+.act-title{font-family:'Orbitron',monospace;font-size:9px;letter-spacing:3px;color:var(--accent);
+  text-transform:uppercase;margin-bottom:10px;text-align:center;}
+.act-grid{display:grid;grid-template-columns:1fr 1fr;gap:7px;}
+.abtn{padding:10px 7px;border-radius:9px;border:1px solid var(--border);
+  background:rgba(255,255,255,.03);color:var(--text);font-family:'Rajdhani',sans-serif;
+  font-size:12px;font-weight:700;cursor:pointer;transition:all .2s;text-align:center;position:relative;overflow:hidden;}
+.abtn::before{content:'';position:absolute;inset:0;opacity:0;transition:.2s;background:linear-gradient(135deg,rgba(0,229,255,.14),transparent);}
+.abtn:hover{border-color:var(--accent);color:var(--accent);}
+.abtn:hover::before{opacity:1;}
+.abtn:active{transform:scale(.96);}
+.abtn.dis{opacity:.3;cursor:not-allowed;pointer-events:none;}
+.ai{font-size:18px;display:block;margin-bottom:2px;}
+.al{font-size:12px;display:block;}
+.as{font-size:9px;color:var(--muted);font-family:'Fira Code',monospace;display:block;}
+.abtn.fill:hover {border-color:var(--accent);box-shadow:0 0 12px rgba(0,229,255,.2);}
+.abtn.empty:hover{border-color:var(--red);box-shadow:0 0 12px rgba(255,51,85,.2);color:var(--red);}
+.abtn.pour:hover {border-color:var(--purple);box-shadow:0 0 12px rgba(191,127,255,.2);color:var(--purple);}
+
+/* HINT */
+.hint-box{background:rgba(0,255,136,.05);border:1px solid rgba(0,255,136,.25);border-radius:9px;
+  padding:9px 14px;font-family:'Fira Code',monospace;font-size:11px;color:var(--green);display:none;animation:si .3s ease;}
+.hint-box.show{display:block;}
+@keyframes si{from{opacity:0;transform:translateX(-6px)}to{opacity:1;transform:translateX(0)}}
+
+/* HISTORY */
+.hist{background:var(--panel);border:1px solid var(--border);border-radius:13px;padding:14px;}
+.hist-hdr{font-family:'Orbitron',monospace;font-size:9px;letter-spacing:3px;color:var(--accent);
+  text-transform:uppercase;display:flex;justify-content:space-between;align-items:center;margin-bottom:9px;}
+.hist-log{max-height:130px;overflow-y:auto;display:flex;flex-direction:column;gap:3px;}
+.hist-log::-webkit-scrollbar{width:3px;}
+.hist-log::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px;}
+.li{display:flex;align-items:center;gap:9px;padding:6px 9px;border-radius:6px;font-size:12px;animation:si .3s ease;}
+.li:nth-child(odd){background:rgba(255,255,255,.02);}
+.li.latest{background:rgba(0,229,255,.07);border:1px solid rgba(0,229,255,.18);}
+.lnum{font-family:'Orbitron',monospace;font-size:9px;color:var(--muted);min-width:16px;}
+.lst{font-family:'Fira Code',monospace;font-size:11px;color:var(--text);}
+.lop{font-size:10px;flex:1;}
+.op-p{padding:2px 7px;border-radius:4px;font-size:9px;font-family:'Fira Code',monospace;font-weight:600;}
+.op-f{background:rgba(0,229,255,.12);color:var(--accent);}
+.op-e{background:rgba(255,51,85,.12);color:var(--red);}
+.op-po{background:rgba(191,127,255,.12);color:var(--purple);}
+.op-s{background:rgba(255,215,0,.12);color:var(--gold);}
+.lempty{text-align:center;padding:14px;color:var(--muted);font-size:11px;letter-spacing:1px;}
+
+/* BOTTOM BAR */
+.bbar{display:flex;gap:8px;flex-wrap:wrap;}
+.btn{padding:10px 16px;border-radius:9px;border:1px solid var(--border);background:rgba(255,255,255,.04);
+  color:var(--text);font-family:'Orbitron',monospace;font-size:10px;font-weight:700;letter-spacing:1px;cursor:pointer;transition:.2s;text-transform:uppercase;}
+.btn:hover{border-color:var(--accent);color:var(--accent);}
+.btn-hint {border-color:rgba(0,255,136,.3);color:var(--green);}
+.btn-hint:hover{background:rgba(0,255,136,.08);border-color:var(--green);}
+.btn-undo {border-color:rgba(255,215,0,.3);color:var(--gold);}
+.btn-undo:hover{background:rgba(255,215,0,.08);}
+.btn-bfs  {border-color:rgba(0,229,255,.3);color:var(--accent);flex:1;}
+.btn-bfs:hover{background:rgba(0,229,255,.08);}
+.btn-rst  {border-color:rgba(255,51,85,.3);color:var(--red);}
+.btn-rst:hover{background:rgba(255,51,85,.08);}
+
+/* ═══════════════════════════════════════
+   BFS TREE PANEL
+═══════════════════════════════════════ */
+.tree-panel{
+  background:var(--panel);border:1px solid var(--border);border-radius:14px;
+  display:flex;flex-direction:column;overflow:hidden;
+  position:sticky;top:12px;max-height:calc(100vh - 24px);
+}
+.tree-hdr{
+  padding:12px 16px;border-bottom:1px solid var(--border);
+  display:flex;align-items:center;justify-content:space-between;flex-shrink:0;
+}
+.tree-hdr-title{font-family:'Orbitron',monospace;font-size:10px;letter-spacing:3px;color:var(--accent);text-transform:uppercase;display:flex;align-items:center;gap:8px;}
+.tree-dot{width:6px;height:6px;border-radius:50%;background:var(--accent);box-shadow:0 0 6px var(--accent);animation:blink 2s ease-in-out infinite;}
+.tree-legend{display:flex;flex-wrap:wrap;gap:6px;padding:8px 14px;border-bottom:1px solid var(--border);flex-shrink:0;}
+.leg{display:flex;align-items:center;gap:5px;font-size:10px;color:var(--muted);}
+.leg-dot{width:10px;height:10px;border-radius:3px;flex-shrink:0;}
+.ld-start  {background:#ffd700;box-shadow:0 0 4px #ffd700;}
+.ld-visited{background:#0a3020;border:1px solid #00ff88;}
+.ld-current{background:#1a3060;border:1px solid #00e5ff;}
+.ld-player {background:#3a1060;border:1px solid #bf7fff;}
+.ld-path   {background:#1a3a00;border:1px solid #00ff88;}
+.ld-goal   {background:#3a2a00;border:1px solid #ffd700;}
+
+/* Tree canvas wrapper */
+.tree-canvas-wrap{flex:1;overflow:auto;position:relative;min-height:300px;}
+.tree-canvas-wrap::-webkit-scrollbar{width:4px;height:4px;}
+.tree-canvas-wrap::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px;}
+#treeCanvas{display:block;}
+
+/* Tree stats row */
+.tree-stats{display:grid;grid-template-columns:1fr 1fr 1fr;border-top:1px solid var(--border);flex-shrink:0;}
+.tstat{padding:9px;text-align:center;border-right:1px solid var(--border);}
+.tstat:last-child{border-right:none;}
+.tstat-v{font-family:'Orbitron',monospace;font-size:16px;font-weight:700;color:var(--accent);}
+.tstat-l{font-size:9px;color:var(--muted);letter-spacing:1px;text-transform:uppercase;}
+
+/* ── WIN OVERLAY ── */
+.win-ov{position:fixed;inset:0;z-index:500;background:rgba(0,0,0,.88);
+  display:none;align-items:center;justify-content:center;animation:fd .4s ease;}
+.win-ov.show{display:flex;}
+@keyframes fd{from{opacity:0}to{opacity:1}}
+.win-box{background:var(--panel);border:2px solid var(--gold);border-radius:22px;
+  padding:40px;text-align:center;max-width:420px;width:90%;box-shadow:0 0 55px rgba(255,215,0,.3);
+  animation:pi .5s cubic-bezier(.34,1.56,.64,1);}
+@keyframes pi{from{transform:scale(.6);opacity:0}to{transform:scale(1);opacity:1}}
+.we{font-size:58px;display:block;animation:bnc 1s ease-in-out infinite;margin-bottom:10px;}
+@keyframes bnc{0%,100%{transform:translateY(0)}50%{transform:translateY(-12px)}}
+.wt{font-family:'Orbitron',monospace;font-size:28px;font-weight:900;color:var(--gold);letter-spacing:3px;}
+.ws{color:var(--muted);font-size:13px;margin:7px 0 18px;letter-spacing:1px;}
+.wstats{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-bottom:18px;}
+.wstat{background:rgba(255,215,0,.06);border:1px solid rgba(255,215,0,.2);border-radius:9px;padding:11px;}
+.wsv{font-family:'Orbitron',monospace;font-size:26px;font-weight:900;color:var(--gold);}
+.wsl{font-size:10px;color:var(--muted);letter-spacing:1px;text-transform:uppercase;}
+.wc{font-size:13px;color:var(--green);margin-bottom:20px;}
+.wc.worse{color:#ff9944;}
+.wbtn{display:inline-block;padding:12px 30px;margin:4px;
+  background:linear-gradient(135deg,var(--accent2),var(--accent));
+  color:#000;font-family:'Orbitron',monospace;font-size:12px;font-weight:900;
+  letter-spacing:2px;border:none;border-radius:9px;cursor:pointer;transition:.2s;}
+.wbtn:hover{transform:translateY(-2px);box-shadow:0 0 18px rgba(0,229,255,.4);}
+.wbtn-g{display:inline-block;padding:12px 30px;margin:4px;background:transparent;
+  border:1px solid var(--border);color:var(--text);font-family:'Orbitron',monospace;
+  font-size:12px;font-weight:700;letter-spacing:2px;border-radius:9px;cursor:pointer;transition:.2s;}
+.wbtn-g:hover{border-color:var(--gold);color:var(--gold);}
+
+/* SPLASH */
+.splash{position:fixed;pointer-events:none;z-index:200;font-size:24px;animation:sp .7s ease-out forwards;}
+@keyframes sp{0%{transform:scale(.5) translateY(0);opacity:1}100%{transform:scale(1.6) translateY(-65px);opacity:0}}
+</style>
+</head>
+<body>
+<div class="stars" id="stars"></div>
+
+<!-- WIN OVERLAY -->
+<div class="win-ov" id="winOv">
+  <div class="win-box">
+    <span class="we">🏆</span>
+    <div class="wt">YOU WIN!</div>
+    <div class="ws" id="wSub">Puzzle solved!</div>
+    <div class="wstats">
+      <div class="wstat"><div class="wsv" id="wMov">—</div><div class="wsl">Your Moves</div></div>
+      <div class="wstat"><div class="wsv" id="wBfs">—</div><div class="wsl">BFS Optimal</div></div>
+    </div>
+    <div class="wc" id="wCmp"></div>
+    <button class="wbtn" onclick="playAgain()">▶ PLAY AGAIN</button>
+    <button class="wbtn-g" onclick="newPuzzle()">NEW PUZZLE</button>
+  </div>
+</div>
+
+<div class="shell">
+
+  <!-- HEADER -->
+  <div class="hdr">
+    <div>
+      <div class="hdr-title">💧 WATER JUG GAME</div>
+      <div class="hdr-sub">BFS PUZZLE · LIVE TREE TRAVERSAL</div>
+    </div>
+    <div class="py-pill" id="pyPill" onclick="checkPython()">
+      <div class="py-dot off" id="pyDot"></div>
+      <span id="pyLbl">Python: checking…</span>
+    </div>
+    <div class="hdr-stats">
+      <div class="hstat"><div class="hstat-val" id="hMov">0</div><div class="hstat-lbl">Moves</div></div>
+      <div class="hstat"><div class="hstat-val" id="hBfs">—</div><div class="hstat-lbl">BFS Opt.</div></div>
+    </div>
+  </div>
+
+  
+  <!-- SETUP -->
+  <div class="setup" id="setupScreen">
+    <h2>⚗️ CONFIGURE PUZZLE</h2>
+    <p>Set jug sizes and target — solve it yourself, watch BFS tree grow in real time!</p>
+    <div class="sinputs">
+      <div class="sg"><label>Jug A (L)</label><input type="number" id="sA" value="4" min="1" max="12"></div>
+      <div class="sg"><label>Jug B (L)</label><input type="number" id="sB" value="3" min="1" max="12"></div>
+      <div class="sg"><label>Target (L)</label><input type="number" id="sT" value="2" min="1" max="12"></div>
+    </div>
+    <div class="presets">
+      <span style="font-size:10px;color:var(--muted);letter-spacing:1px;align-self:center">PRESETS ›</span>
+      <button class="pb" onclick="sp(4,3,2)">4,3→2</button>
+      <button class="pb" onclick="sp(5,3,4)">5,3→4</button>
+      <button class="pb" onclick="sp(6,4,2)">6,4→2</button>
+      <button class="pb" onclick="sp(7,5,3)">7,5→3</button>
+    </div>
+    <button class="btn-start" onclick="startGame()">🎮 START GAME</button>
+  </div>
+
+  <!-- GAME + TREE -->
+  <div class="game-wrapper" id="gameWrapper" style="display:none">
+
+    <!-- LEFT: GAME COLUMN -->
+    <div class="game-col">
+
+      <!-- Target banner -->
+      <div class="tbanner">
+        <div class="tbanner-txt">🎯 GET EXACTLY <b id="tVal">2</b> L IN EITHER JUG</div>
+        <div class="moves-ct">MOVES: <b id="mCt">0</b></div>
+        <div class="bfs-badge" id="bBadge">⚡ BFS Optimal: — moves</div>
+      </div>
+
+      <!-- JUGS -->
+      <div class="jugs-row">
+        <!-- JUG A -->
+        <div class="jug-card" id="cA">
+          <div class="jug-name">⚗️ JUG A</div>
+          <svg viewBox="0 0 90 200" width="100" xmlns="http://www.w3.org/2000/svg">
+            <defs>
+              <linearGradient id="wgA" x1="0" y1="0" x2="1" y2="0">
+                <stop offset="0%" stop-color="#003399"/><stop offset="45%" stop-color="#0077ff"/>
+                <stop offset="80%" stop-color="#33aaff"/><stop offset="100%" stop-color="#0055cc"/>
+              </linearGradient>
+              <linearGradient id="bgA" x1="0" y1="0" x2="1" y2="0">
+                <stop offset="0%" stop-color="#08182e"/><stop offset="50%" stop-color="#0e2540"/><stop offset="100%" stop-color="#061220"/>
+              </linearGradient>
+              <clipPath id="cpA"><rect x="8" y="16" width="64" height="148" rx="4"/></clipPath>
+            </defs>
+            <rect x="10" y="18" width="64" height="148" rx="7" fill="rgba(0,0,0,.4)"/>
+            <rect x="8" y="16" width="64" height="148" rx="7" fill="url(#bgA)" stroke="rgba(0,180,255,.3)" stroke-width="1.5"/>
+            <g clip-path="url(#cpA)">
+              <rect id="wA" x="8" y="164" width="64" height="0" fill="url(#wgA)" opacity=".92" style="transition:y .6s cubic-bezier(.34,1.2,.64,1),height .6s cubic-bezier(.34,1.2,.64,1)"/>
+              <rect id="wvA" x="8" y="164" width="64" height="5" fill="#44aaff" opacity=".4" rx="3" style="transition:y .6s cubic-bezier(.34,1.2,.64,1)"/>
+            </g>
+            <g id="tkA"></g>
+            <rect x="8" y="16" width="64" height="148" rx="7" fill="none" stroke="rgba(0,180,255,.3)" stroke-width="1.5"/>
+            <path d="M72,48 Q88,48 88,82 Q88,116 72,116" fill="none" stroke="rgba(0,180,255,.4)" stroke-width="3" stroke-linecap="round"/>
+            <path d="M8,24 Q2,20 4,13" fill="none" stroke="rgba(0,180,255,.4)" stroke-width="3" stroke-linecap="round"/>
+            <rect x="8" y="9" width="64" height="9" rx="4.5" fill="#0e2040" stroke="rgba(0,180,255,.4)" stroke-width="1.5"/>
+            <rect x="5" y="164" width="70" height="10" rx="5" fill="#0e2040" stroke="rgba(0,180,255,.3)" stroke-width="1.5"/>
+          </svg>
+          <div><div class="jug-lit" id="lA">0</div><div class="jug-max" id="mA">/ 4 L</div></div>
+        </div>
+
+        <div class="mid-col">
+          <div class="mid-arr">⟶</div>
+          <div style="font-size:22px;opacity:.12">⇄</div>
+          <div class="mid-arr">⟵</div>
+        </div>
+
+        <!-- JUG B -->
+        <div class="jug-card" id="cB">
+          <div class="jug-name">🧪 JUG B</div>
+          <svg viewBox="0 0 90 200" width="100" xmlns="http://www.w3.org/2000/svg">
+            <defs>
+              <linearGradient id="wgB" x1="0" y1="0" x2="1" y2="0">
+                <stop offset="0%" stop-color="#4400aa"/><stop offset="45%" stop-color="#8833ff"/>
+                <stop offset="80%" stop-color="#bb77ff"/><stop offset="100%" stop-color="#6611dd"/>
+              </linearGradient>
+              <linearGradient id="bgB" x1="0" y1="0" x2="1" y2="0">
+                <stop offset="0%" stop-color="#120820"/><stop offset="50%" stop-color="#1a0f30"/><stop offset="100%" stop-color="#0c0518"/>
+              </linearGradient>
+              <clipPath id="cpB"><rect x="8" y="16" width="64" height="148" rx="4"/></clipPath>
+            </defs>
+            <rect x="10" y="18" width="64" height="148" rx="7" fill="rgba(0,0,0,.4)"/>
+            <rect x="8" y="16" width="64" height="148" rx="7" fill="url(#bgB)" stroke="rgba(140,80,255,.3)" stroke-width="1.5"/>
+            <g clip-path="url(#cpB)">
+              <rect id="wB" x="8" y="164" width="64" height="0" fill="url(#wgB)" opacity=".92" style="transition:y .6s cubic-bezier(.34,1.2,.64,1),height .6s cubic-bezier(.34,1.2,.64,1)"/>
+              <rect id="wvB" x="8" y="164" width="64" height="5" fill="#bb77ff" opacity=".4" rx="3" style="transition:y .6s cubic-bezier(.34,1.2,.64,1)"/>
+            </g>
+            <g id="tkB"></g>
+            <rect x="8" y="16" width="64" height="148" rx="7" fill="none" stroke="rgba(140,80,255,.3)" stroke-width="1.5"/>
+            <path d="M72,48 Q88,48 88,82 Q88,116 72,116" fill="none" stroke="rgba(140,80,255,.4)" stroke-width="3" stroke-linecap="round"/>
+            <path d="M8,24 Q2,20 4,13" fill="none" stroke="rgba(140,80,255,.4)" stroke-width="3" stroke-linecap="round"/>
+            <rect x="8" y="9" width="64" height="9" rx="4.5" fill="#1a0830" stroke="rgba(140,80,255,.4)" stroke-width="1.5"/>
+            <rect x="5" y="164" width="70" height="10" rx="5" fill="#1a0830" stroke="rgba(140,80,255,.3)" stroke-width="1.5"/>
+          </svg>
+          <div><div class="jug-lit" id="lB">0</div><div class="jug-max" id="mB">/ 3 L</div></div>
+        </div>
+      </div>
+
+      <!-- ACTIONS -->
+      <div class="actions">
+        <div class="act-title">⚡ CHOOSE YOUR MOVE</div>
+        <div class="act-grid">
+          <button class="abtn fill"  id="bFA" onclick="doMove('fillA')"><span class="ai">🚰</span><span class="al">Fill Jug A</span><span class="as" id="subFA">→ full</span></button>
+          <button class="abtn fill"  id="bFB" onclick="doMove('fillB')"><span class="ai">🚰</span><span class="al">Fill Jug B</span><span class="as" id="subFB">→ full</span></button>
+          <button class="abtn empty" id="bEA" onclick="doMove('emptyA')"><span class="ai">🗑️</span><span class="al">Empty Jug A</span><span class="as" id="subEA">→ 0</span></button>
+          <button class="abtn empty" id="bEB" onclick="doMove('emptyB')"><span class="ai">🗑️</span><span class="al">Empty Jug B</span><span class="as" id="subEB">→ 0</span></button>
+          <button class="abtn pour"  id="bAB" onclick="doMove('pourAB')"><span class="ai">➡️</span><span class="al">Pour A → B</span><span class="as" id="subAB">A into B</span></button>
+          <button class="abtn pour"  id="bBA" onclick="doMove('pourBA')"><span class="ai">⬅️</span><span class="al">Pour B → A</span><span class="as" id="subBA">B into A</span></button>
+        </div>
+      </div>
+
+      <div class="hint-box" id="hintBox"></div>
+
+      <!-- HISTORY -->
+      <div class="hist">
+        <div class="hist-hdr"><span>📜 MOVE HISTORY</span><span style="font-family:'Fira Code',monospace;font-size:9px;color:var(--muted)">(A, B)</span></div>
+        <div class="hist-log" id="histLog"><div class="lempty">No moves yet!</div></div>
+      </div>
+
+      <!-- BOTTOM BAR -->
+      <div class="bbar">
+        <button class="btn btn-hint" onclick="showHint()">💡 HINT</button>
+        <button class="btn btn-undo" onclick="undoMove()">↩ UNDO</button>
+        <button class="btn btn-bfs"  onclick="autoSolve()">🔍 BFS AUTO-SOLVE</button>
+        <button class="btn btn-rst"  onclick="resetGame()">↺ RESET</button>
+      </div>
+    </div>
+
+    <!-- RIGHT: BFS TREE PANEL -->
+    <div class="tree-panel" id="treePanel">
+      <div class="tree-hdr">
+        <div class="tree-hdr-title">
+          <div class="tree-dot"></div>
+          BFS TREE TRAVERSAL
+        </div>
+        <span style="font-family:'Fira Code',monospace;font-size:10px;color:var(--muted)" id="treeDepthLbl">depth: 0</span>
+      </div>
+      <div class="tree-legend">
+        <div class="leg"><div class="leg-dot ld-start"></div>Start</div>
+        <div class="leg"><div class="leg-dot ld-visited"></div>Visited</div>
+        <div class="leg"><div class="leg-dot ld-current"></div>BFS Next</div>
+        <div class="leg"><div class="leg-dot ld-player"></div>You</div>
+        <div class="leg"><div class="leg-dot ld-path"></div>BFS Path</div>
+        <div class="leg"><div class="leg-dot ld-goal"></div>Goal</div>
+      </div>
+      <div class="tree-canvas-wrap" id="treeWrap">
+        <canvas id="treeCanvas"></canvas>
+      </div>
+      <div class="tree-stats">
+        <div class="tstat"><div class="tstat-v" id="tsNodes">0</div><div class="tstat-l">Nodes</div></div>
+        <div class="tstat"><div class="tstat-v" id="tsDepth">0</div><div class="tstat-l">Depth</div></div>
+        <div class="tstat"><div class="tstat-v" id="tsQueue">0</div><div class="tstat-l">Explored</div></div>
+      </div>
+    </div>
+
+  </div><!-- game-wrapper -->
+</div><!-- shell -->
+
+<script>
+/* ═══════════════════════════════════════════════
+   BFS ALGORITHM (mirrors bfs_solver.py)
+═══════════════════════════════════════════════ */
+function jsBFS(capA, capB, target) {
+  const queue = [[[0,0],[]]];
+  const visited = new Set(['0,0']);
+  let explored=0, maxQ=1;
+  while (queue.length) {
+    maxQ = Math.max(maxQ, queue.length);
+    const [[a,b],path] = queue.shift();
+    explored++;
+    const op  = path.length ? path[path.length-1].next_op : 'START';
+    const cur = [...path, {a,b,op}];
+    if (a===target||b===target) return {found:true,path:cur,stats:{explored,max_queue:maxQ}};
+    const moves=[
+      [capA,b,'Fill A'],[a,capB,'Fill B'],
+      [0,b,'Empty A'],[a,0,'Empty B'],
+      [Math.max(0,a+b-capB),Math.min(capB,a+b),'Pour A->B'],
+      [Math.min(capA,a+b),Math.max(0,a+b-capA),'Pour B->A'],
+    ];
+    for (const [na,nb,nextOp] of moves) {
+      const k=`${na},${nb}`;
+      if (!visited.has(k)) {
+        visited.add(k);
+        const tagged=[...cur.slice(0,-1),{...cur[cur.length-1],next_op:nextOp}];
+        queue.push([[na,nb],tagged]);
+      }
+    }
+  }
+  return {found:false,path:null,stats:{explored,max_queue:maxQ}};
+}
+
+/* ═══════════════════════════════════════════════
+   BUILD FULL BFS TREE (all states + edges)
+   for visualization
+═══════════════════════════════════════════════ */
+function buildBFSTree(capA, capB, target) {
+  // Returns nodes and edges for drawing the full explored BFS tree
+  const nodes = new Map(); // key -> {a,b,depth,children,parent}
+  const edges = [];
+  const startKey = '0,0';
+  nodes.set(startKey, {a:0,b:0,depth:0,children:[],parent:null,isGoal:false});
+  const queue = [startKey];
+  const visited = new Set([startKey]);
+
+  while (queue.length) {
+    const key = queue.shift();
+    const node = nodes.get(key);
+    const {a,b,depth} = node;
+
+    const moves=[
+      [capA,b,'Fill A'],[a,capB,'Fill B'],
+      [0,b,'Empty A'],[a,0,'Empty B'],
+      [Math.max(0,a+b-capB),Math.min(capB,a+b),'Pour A->B'],
+      [Math.min(capA,a+b),Math.max(0,a+b-capA),'Pour B->A'],
+    ];
+    for (const [na,nb,op] of moves) {
+      const nk = `${na},${nb}`;
+      if (!visited.has(nk)) {
+        visited.add(nk);
+        const isGoal = na===target||nb===target;
+        nodes.set(nk, {a:na,b:nb,depth:depth+1,children:[],parent:key,op,isGoal});
+        nodes.get(key).children.push(nk);
+        edges.push({from:key,to:nk,op});
+        if (!isGoal) queue.push(nk);
+        else nodes.get(nk).children = []; // stop expanding after goal
+      }
+    }
+  }
+  return {nodes, edges};
+}
+
+/* ═══════════════════════════════════════════════
+   LAYOUT TREE (top-down, grouped by depth)
+═══════════════════════════════════════════════ */
+function layoutTree(nodes) {
+  // Group by depth
+  const levels = new Map();
+  for (const [key,node] of nodes) {
+    if (!levels.has(node.depth)) levels.set(node.depth, []);
+    levels.get(node.depth).push(key);
+  }
+
+  const NW=56, NH=34, HGAP=14, VGAP=70;
+  const positions = new Map();
+  let maxW = 0;
+
+  // BFS order for each level to preserve tree structure
+  for (const [depth, keys] of [...levels.entries()].sort((a,b)=>a[0]-b[0])) {
+    const totalW = keys.length*(NW+HGAP)-HGAP;
+    if (totalW > maxW) maxW = totalW;
+    keys.forEach((k,i)=>{
+      positions.set(k, {
+        x: i*(NW+HGAP) + NW/2,
+        y: depth*VGAP + 20
+      });
+    });
+  }
+
+  const maxDepth = Math.max(...[...levels.keys()]);
+  const totalH   = (maxDepth+1)*VGAP + NH + 30;
+
+  return {positions, totalW: maxW + NW, totalH};
+}
+
+/* ═══════════════════════════════════════════════
+   PYTHON SERVER
+═══════════════════════════════════════════════ */
+let pythonOnline = false;
+async function checkPython() {
+  try {
+    const res = await fetch('http://localhost:8000/solve?a=2&b=1&t=1',{signal:AbortSignal.timeout(1500)});
+    if (res.ok){ pythonOnline=true; document.getElementById('pyDot').className='py-dot'; document.getElementById('pyLbl').textContent='Python: ONLINE ✓'; }
+  } catch {
+    pythonOnline=false; document.getElementById('pyDot').className='py-dot off'; document.getElementById('pyLbl').textContent='Python: offline (JS fallback)';
+  }
+}
+async function runBFS(capA,capB,target){
+  if(pythonOnline){try{const r=await fetch(`http://localhost:8000/solve?a=${capA}&b=${capB}&t=${target}`);return await r.json();}catch{}}
+  return {cap_a:capA,cap_b:capB,target,...jsBFS(capA,capB,target)};
+}
+
+/* ═══════════════════════════════════════════════
+   GAME STATE
+═══════════════════════════════════════════════ */
+let CAP_A=4,CAP_B=3,TARGET=2;
+let stA=0,stB=0,moves=0;
+let history=[];
+let bfsSolution=[], bfsLength=0;
+let bfsTree={nodes:new Map(),edges:[]};
+let treeLayout={positions:new Map(),totalW:0,totalH:0};
+const IH=148; // SVG inner jug height
+
+/* ═══════════════════════════════════════════════
+   STARS
+═══════════════════════════════════════════════ */
+(function(){
+  const c=document.getElementById('stars');
+  for(let i=0;i<70;i++){
+    const s=document.createElement('div');s.className='star';
+    const z=Math.random()*2+.8;
+    s.style.cssText=`width:${z}px;height:${z}px;top:${Math.random()*100}%;left:${Math.random()*100}%;--d:${2+Math.random()*4}s;--dl:-${Math.random()*6}s`;
+    c.appendChild(s);
+  }
+})();
+checkPython();
+
+/* ═══════════════════════════════════════════════
+   SETUP
+═══════════════════════════════════════════════ */
+function sp(a,b,t){document.getElementById('sA').value=a;document.getElementById('sB').value=b;document.getElementById('sT').value=t;}
+
+async function startGame(){
+  CAP_A=Math.max(1,parseInt(document.getElementById('sA').value)||4);
+  CAP_B=Math.max(1,parseInt(document.getElementById('sB').value)||3);
+  TARGET=Math.max(1,parseInt(document.getElementById('sT').value)||2);
+  if(TARGET>Math.max(CAP_A,CAP_B)){alert('Target cannot exceed largest jug!');return;}
+
+  const result=await runBFS(CAP_A,CAP_B,TARGET);
+  if(!result.found){alert('No solution exists for these values!');return;}
+
+  bfsSolution=result.path; bfsLength=result.path.length-1;
+
+  // Build full tree for viz
+  bfsTree=buildBFSTree(CAP_A,CAP_B,TARGET);
+  treeLayout=layoutTree(bfsTree.nodes);
+
+  document.getElementById('setupScreen').style.display='none';
+  document.getElementById('gameWrapper').style.display='grid';
+
+  document.getElementById('tVal').textContent=TARGET;
+  document.getElementById('mA').textContent=`/ ${CAP_A} L`;
+  document.getElementById('mB').textContent=`/ ${CAP_B} L`;
+  document.getElementById('bBadge').textContent=`⚡ BFS Optimal: ${bfsLength} moves`;
+  document.getElementById('hBfs').textContent=bfsLength;
+
+  drawTicks('tkA',CAP_A); drawTicks('tkB',CAP_B);
+  stA=0;stB=0;moves=0;history=[];
+  renderJugs(false,false);
+  renderHistory();
+  refreshBtns();
+  document.getElementById('hintBox').classList.remove('show');
+  drawTree();
+}
+
+/* ═══════════════════════════════════════════════
+   TICKS
+═══════════════════════════════════════════════ */
+function drawTicks(id,cap){
+  const g=document.getElementById(id);g.innerHTML='';
+  const ns='http://www.w3.org/2000/svg';
+  for(let i=0;i<=cap;i++){
+    const y=16+IH-Math.round(IH*i/cap);
+    const l=document.createElementNS(ns,'line');
+    l.setAttribute('x1','66');l.setAttribute('x2','72');l.setAttribute('y1',y);l.setAttribute('y2',y);
+    l.setAttribute('stroke','rgba(0,180,255,.27)');l.setAttribute('stroke-width','1');
+    const t=document.createElementNS(ns,'text');
+    t.setAttribute('x','74');t.setAttribute('y',y+3);t.setAttribute('font-size','6');
+    t.setAttribute('fill','rgba(0,180,255,.3)');t.setAttribute('font-family','monospace');t.textContent=i;
+    g.appendChild(l);g.appendChild(t);
+  }
+}
+
+/* ═══════════════════════════════════════════════
+   RENDER JUGS
+═══════════════════════════════════════════════ */
+function renderJugs(cA,cB){
+  setFill('A',stA,CAP_A);setFill('B',stB,CAP_B);
+  const la=document.getElementById('lA'),lb=document.getElementById('lB');
+  la.textContent=stA;lb.textContent=stB;
+  la.className='jug-lit'+(stA===TARGET?' goal':cA?' changed':'');
+  lb.className='jug-lit'+(stB===TARGET?' goal':cB?' changed':'');
+  if(cA)flash('cA');if(cB)flash('cB');
+  document.getElementById('mCt').textContent=moves;
+  document.getElementById('hMov').textContent=moves;
+
+  const abA=Math.max(0,stA+stB-CAP_B),abB=Math.min(CAP_B,stA+stB);
+  const baA=Math.min(CAP_A,stA+stB),baB=Math.max(0,stA+stB-CAP_A);
+  document.getElementById('subFA').textContent=`${stA}→${CAP_A}L`;
+  document.getElementById('subFB').textContent=`${stB}→${CAP_B}L`;
+  document.getElementById('subEA').textContent=`${stA}→0`;
+  document.getElementById('subEB').textContent=`${stB}→0`;
+  document.getElementById('subAB').textContent=`A:${stA}→${abA}, B:${stB}→${abB}`;
+  document.getElementById('subBA').textContent=`A:${stA}→${baA}, B:${stB}→${baB}`;
+}
+function setFill(id,val,cap){
+  const r=cap>0?Math.min(val/cap,1):0,fh=Math.round(IH*r),fy=16+IH-fh;
+  document.getElementById('w'+id).setAttribute('y',fy);
+  document.getElementById('w'+id).setAttribute('height',fh);
+  const wv=document.getElementById('wv'+id);
+  wv.setAttribute('y',fy-2);wv.style.display=fh>0?'block':'none';
+}
+function flash(id){const c=document.getElementById(id);c.classList.add('flash');setTimeout(()=>c.classList.remove('flash'),700);}
+
+/* ═══════════════════════════════════════════════
+   MOVES
+═══════════════════════════════════════════════ */
+function doMove(type){
+  let na=stA,nb=stB,op='';
+  switch(type){
+    case'fillA':na=CAP_A;op='Fill A';break;case'fillB':nb=CAP_B;op='Fill B';break;
+    case'emptyA':na=0;op='Empty A';break;case'emptyB':nb=0;op='Empty B';break;
+    case'pourAB':na=Math.max(0,stA+stB-CAP_B);nb=Math.min(CAP_B,stA+stB);op='Pour A->B';break;
+    case'pourBA':na=Math.min(CAP_A,stA+stB);nb=Math.max(0,stA+stB-CAP_A);op='Pour B->A';break;
+  }
+  if(na===stA&&nb===stB)return;
+  history.push({a:stA,b:stB});
+  const pA=stA,pB=stB;stA=na;stB=nb;moves++;
+  renderJugs(na!==pA,nb!==pB);renderHistory(op);refreshBtns();
+  spawnSplash(type);document.getElementById('hintBox').classList.remove('show');
+  drawTree(); // ← update tree
+  if(stA===TARGET||stB===TARGET)setTimeout(showWin,550);
+}
+
+function undoMove(){
+  if(!history.length)return;
+  const p=history.pop();const cA=p.a!==stA,cB=p.b!==stB;
+  stA=p.a;stB=p.b;moves=Math.max(0,moves-1);
+  renderJugs(cA,cB);renderHistory('↩ undo');refreshBtns();
+  document.getElementById('hintBox').classList.remove('show');
+  drawTree();
+}
+
+function refreshBtns(){
+  const abA=Math.max(0,stA+stB-CAP_B),abB=Math.min(CAP_B,stA+stB);
+  const baA=Math.min(CAP_A,stA+stB),baB=Math.max(0,stA+stB-CAP_A);
+  setD('bFA',stA===CAP_A);setD('bFB',stB===CAP_B);
+  setD('bEA',stA===0);setD('bEB',stB===0);
+  setD('bAB',stA===0||stB===CAP_B||(abA===stA&&abB===stB));
+  setD('bBA',stB===0||stA===CAP_A||(baA===stA&&baB===stB));
+}
+function setD(id,d){document.getElementById(id).classList.toggle('dis',d);}
+
+/* ═══════════════════════════════════════════════
+   HISTORY
+═══════════════════════════════════════════════ */
+function renderHistory(lastOp){
+  const log=document.getElementById('histLog');
+  if(!moves){log.innerHTML='<div class="lempty">No moves yet!</div>';return;}
+  const all=[...history.map((h,i)=>({...h,num:i,op:'—',latest:false})),{a:stA,b:stB,num:moves,op:lastOp||'—',latest:true}];
+  log.innerHTML='';
+  all.slice().reverse().forEach(e=>{
+    const cls=e.op.includes('Fill')?'op-f':e.op.includes('Empty')?'op-e':e.op.includes('Pour')?'op-po':'op-s';
+    const d=document.createElement('div');d.className='li'+(e.latest?' latest':'');
+    d.innerHTML=`<span class="lnum">${e.num}</span><span class="lst">(${e.a},${e.b})</span><span class="lop"><span class="op-p ${cls}">${e.op}</span></span>`;
+    log.appendChild(d);
+  });
+}
+
+/* ═══════════════════════════════════════════════
+   HINT
+═══════════════════════════════════════════════ */
+function showHint(){
+  const box=document.getElementById('hintBox');
+  const idx=bfsSolution.findIndex(s=>s.a===stA&&s.b===stB);
+  if(idx>=0&&idx<bfsSolution.length-1){const n=bfsSolution[idx+1];box.textContent=`💡 BFS says: ${n.op}  →  (${n.a}, ${n.b})`;}
+  else{const f=bfsSolution[1];box.textContent=f?`💡 Off BFS path. First BFS move: ${f.op}`:'💡 No hint.';}
+  box.classList.add('show');
+}
+
+/* ═══════════════════════════════════════════════
+   AUTO SOLVE
+═══════════════════════════════════════════════ */
+function autoSolve(){
+  if(!confirm('Auto-play BFS optimal solution?'))return;
+  stA=0;stB=0;moves=0;history=[];
+  renderJugs(false,false);renderHistory();document.getElementById('hintBox').classList.remove('show');
+  let i=0;
+  function step(){
+    if(i>=bfsSolution.length)return;
+    const s=bfsSolution[i];const cA=s.a!==stA,cB=s.b!==stB;
+    stA=s.a;stB=s.b;if(i>0)moves++;
+    renderJugs(cA,cB);renderHistory(s.op);drawTree();i++;
+    if(i<bfsSolution.length)setTimeout(step,900);else setTimeout(showWin,600);
+  }
+  step();
+}
+
+/* ═══════════════════════════════════════════════
+   WIN
+═══════════════════════════════════════════════ */
+function showWin(){
+  document.getElementById('wMov').textContent=moves;document.getElementById('wBfs').textContent=bfsLength;
+  document.getElementById('wSub').textContent=`Jug A:${stA}L | Jug B:${stB}L — Target ${TARGET}L!`;
+  const d=moves-bfsLength,c=document.getElementById('wCmp');
+  if(d===0){c.textContent='🌟 PERFECT! Matched BFS optimal!';c.className='wc';}
+  else if(d<=2){c.textContent=`👍 Only ${d} extra move(s)!`;c.className='wc';}
+  else{c.textContent=`📚 ${d} moves above BFS optimal (${bfsLength}). Try again!`;c.className='wc worse';}
+  document.getElementById('winOv').classList.add('show');
+}
+function playAgain(){document.getElementById('winOv').classList.remove('show');resetGame();}
+function newPuzzle(){document.getElementById('winOv').classList.remove('show');document.getElementById('gameWrapper').style.display='none';document.getElementById('setupScreen').style.display='block';}
+function resetGame(){stA=0;stB=0;moves=0;history=[];renderJugs(false,false);renderHistory();refreshBtns();document.getElementById('hintBox').classList.remove('show');drawTree();}
+
+/* ═══════════════════════════════════════════════
+   SPLASH
+═══════════════════════════════════════════════ */
+function spawnSplash(type){
+  const e={fillA:'💧',fillB:'💧',emptyA:'💦',emptyB:'💦',pourAB:'🌊',pourBA:'🌊'}[type]||'💧';
+  const el=document.createElement('div');el.className='splash';el.textContent=e;
+  el.style.left=(25+Math.random()*40)+'%';el.style.top=(25+Math.random()*30)+'%';
+  document.body.appendChild(el);setTimeout(()=>el.remove(),800);
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   BFS TREE DRAWING ENGINE
+   Draws the full explored BFS tree on a canvas.
+   Highlights:
+     - (0,0) as root / START
+     - BFS optimal path in green
+     - Current player position in purple
+     - All visited states in the player's history
+     - Goal node in gold
+     - Next BFS-suggested node in cyan
+═══════════════════════════════════════════════════════════════ */
+function drawTree(){
+  const canvas=document.getElementById('treeCanvas');
+  const wrap=document.getElementById('treeWrap');
+  const ctx=canvas.getContext('2d');
+
+  const NW=58,NH=32,HGAP=12,VGAP=72;
+  const nodes=bfsTree.nodes;
+
+  if(!nodes||nodes.size===0)return;
+
+  // Re-layout with proper tree ordering preserving parent-child structure
+  const levels=new Map();
+  for(const [k,n] of nodes)levels.has(n.depth)?levels.get(n.depth).push(k):levels.set(n.depth,[k]);
+
+  // X positions: use BFS order per level, but place children under parent
+  const pos=new Map();
+  const sortedDepths=[...levels.keys()].sort((a,b)=>a-b);
+
+  // Assign slots per depth respecting tree order
+  // Do a DFS to assign leaves first, then propagate up
+  function countLeaves(key){
+    const n=nodes.get(key);if(!n)return 1;
+    if(n.children.length===0)return 1;
+    return n.children.reduce((s,c)=>s+countLeaves(c),0);
+  }
+  function assignPos(key,left){
+    const n=nodes.get(key);if(!n)return left;
+    if(n.children.length===0){pos.set(key,{x:left*(NW+HGAP)+NW/2,y:n.depth*VGAP+28});return left+1;}
+    let cur=left;
+    for(const c of n.children)cur=assignPos(c,cur);
+    const firstC=pos.get(n.children[0]),lastC=pos.get(n.children[n.children.length-1]);
+    pos.set(key,{x:(firstC.x+lastC.x)/2,y:n.depth*VGAP+28});
+    return cur;
+  }
+  assignPos('0,0',0);
+
+  // Canvas size
+  let maxX=0,maxY=0;
+  for(const p of pos.values()){if(p.x>maxX)maxX=p.x;if(p.y>maxY)maxY=p.y;}
+  const W=Math.max(maxX+NW+20,wrap.clientWidth||300);
+  const H=maxY+NH+30;
+  canvas.width=W;canvas.height=H;
+
+  ctx.clearRect(0,0,W,H);
+
+  // Build sets for fast lookup
+  const playerVisited=new Set(history.map(h=>`${h.a},${h.b}`));
+  playerVisited.add(`${stA},${stB}`);
+  const bfsPathSet=new Set(bfsSolution.map(s=>`${s.a},${s.b}`));
+  const currentKey=`${stA},${stB}`;
+
+  // Next BFS suggested node
+  const bfsIdx=bfsSolution.findIndex(s=>s.a===stA&&s.b===stB);
+  const nextBfsKey=bfsIdx>=0&&bfsIdx<bfsSolution.length-1?`${bfsSolution[bfsIdx+1].a},${bfsSolution[bfsIdx+1].b}`:null;
+
+  // ── DRAW EDGES ──
+  for(const [key,node] of nodes){
+    const from=pos.get(key);if(!from)continue;
+    for(const childKey of node.children){
+      const to=pos.get(childKey);if(!to)continue;
+      const isBfsEdge=bfsPathSet.has(key)&&bfsPathSet.has(childKey);
+      ctx.beginPath();
+      ctx.moveTo(from.x,from.y+NH/2);
+      // Curve
+      const mx=(from.x+to.x)/2,my=(from.y+NH/2+to.y-NH/2)/2;
+      ctx.quadraticCurveTo(mx,my+8,to.x,to.y-NH/2);
+      if(isBfsEdge){ctx.strokeStyle='rgba(0,255,136,.55)';ctx.lineWidth=2;}
+      else{ctx.strokeStyle='rgba(26,53,80,.8)';ctx.lineWidth=1;}
+      ctx.stroke();
+    }
+  }
+
+  // ── DRAW NODES ──
+  const maxDepthSeen=sortedDepths[sortedDepths.length-1]||0;
+  let totalNodes=nodes.size,exploredCount=playerVisited.size;
+
+  for(const [key,node] of nodes){
+    const p=pos.get(key);if(!p)continue;
+    const x=p.x-NW/2,y=p.y-NH/2;
+    const isStart=key==='0,0';
+    const isGoal=node.isGoal;
+    const isCurrent=key===currentKey;
+    const isPlayerVisited=playerVisited.has(key)&&!isCurrent;
+    const isBfsPath=bfsPathSet.has(key);
+    const isNextBfs=key===nextBfsKey;
+
+    // Node fill
+    let fillColor,strokeColor,strokeW=1.5,glow=false;
+    if(isStart)           {fillColor='#2a2000';strokeColor='#ffd700';strokeW=2.5;glow=true;}
+    else if(isCurrent)    {fillColor='#1a2060';strokeColor='#bf7fff';strokeW=2.5;glow=true;}
+    else if(isGoal)       {fillColor='#3a2a00';strokeColor='#ffd700';strokeW=2;}
+    else if(isNextBfs)    {fillColor='#0f2848';strokeColor='#00e5ff';strokeW=2;}
+    else if(isBfsPath&&isPlayerVisited){fillColor='#0f2820';strokeColor='#00ff88';strokeW=2;}
+    else if(isBfsPath)    {fillColor='#142808';strokeColor='rgba(0,255,136,.5)';strokeW=1.5;}
+    else if(isPlayerVisited){fillColor='#1a0a30';strokeColor='rgba(191,127,255,.6)';strokeW=1.5;}
+    else                  {fillColor='#0a1828';strokeColor='rgba(26,53,80,.8)';strokeW=1;}
+
+    // Glow effect
+    if(glow){
+      ctx.save();
+      ctx.shadowColor=isCurrent?'#bf7fff':'#ffd700';
+      ctx.shadowBlur=12;
+    }
+
+    // Rounded rect node
+    roundRect(ctx,x,y,NW,NH,6);
+    ctx.fillStyle=fillColor;ctx.fill();
+    ctx.strokeStyle=strokeColor;ctx.lineWidth=strokeW;ctx.stroke();
+    if(glow)ctx.restore();
+
+    // Node text
+    ctx.font=`bold 9px 'Orbitron',monospace`;
+    ctx.textAlign='center';ctx.textBaseline='middle';
+
+    // State label
+    const label=`(${node.a},${node.b})`;
+    ctx.fillStyle=isCurrent?'#bf7fff':isStart?'#ffd700':isGoal?'#ffd700':isBfsPath?'#00ff88':'rgba(180,210,240,.8)';
+    ctx.fillText(label,p.x,p.y-5);
+
+    // Op label (small)
+    if(node.op&&node.op!=='START'){
+      ctx.font=`8px 'Fira Code',monospace`;
+      ctx.fillStyle='rgba(100,140,180,.6)';
+      ctx.fillText(node.op,p.x,p.y+8);
+    } else if(isStart){
+      ctx.font=`8px 'Orbitron',monospace`;
+      ctx.fillStyle='rgba(255,215,0,.7)';
+      ctx.fillText('START',p.x,p.y+8);
+    }
+
+    // Goal badge
+    if(isGoal){
+      ctx.font='10px serif';
+      ctx.fillText('🏆',p.x+NW/2-8,p.y-NH/2+6);
+    }
+    if(isCurrent){
+      ctx.font='10px serif';
+      ctx.fillText('👤',p.x+NW/2-8,p.y-NH/2+6);
+    }
+  }
+
+  // Update stats
+  document.getElementById('tsNodes').textContent=totalNodes;
+  document.getElementById('tsDepth').textContent=maxDepthSeen;
+  document.getElementById('tsQueue').textContent=exploredCount;
+  document.getElementById('treeDepthLbl').textContent=`depth: ${maxDepthSeen}`;
+
+  // Scroll to show current node
+  const curPos=pos.get(currentKey);
+  if(curPos){
+    wrap.scrollLeft=Math.max(0,curPos.x-wrap.clientWidth/2);
+    wrap.scrollTop=Math.max(0,curPos.y-wrap.clientHeight/2);
+  }
+}
+
+function roundRect(ctx,x,y,w,h,r){
+  ctx.beginPath();
+  ctx.moveTo(x+r,y);ctx.lineTo(x+w-r,y);ctx.arcTo(x+w,y,x+w,y+r,r);
+  ctx.lineTo(x+w,y+h-r);ctx.arcTo(x+w,y+h,x+w-r,y+h,r);
+  ctx.lineTo(x+r,y+h);ctx.arcTo(x,y+h,x,y+h-r,r);
+  ctx.lineTo(x,y+r);ctx.arcTo(x,y,x+r,y,r);ctx.closePath();
+}
+
+// Redraw tree on resize
+window.addEventListener('resize',()=>{ if(bfsTree.nodes.size>0) drawTree(); });
+</script>
+</body>
+</html>
